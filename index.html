@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no"> {/* سازگاری با نمایش Mini App */}
+    <title>ناوبر آشوب (مینی اپ)</title>
+
+    <link href="https://unpkg.com/vis-network/styles/vis-network.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <style>
+        :root {
+             /* --tg-theme-bg-color: #0f172a; /* مثال: استفاده از متغیرهای تم تلگرام (اختیاری) */
+             /* --tg-theme-text-color: #e0f2fe; */
+             /* --tg-theme-button-color: #4fc3f7; */
+             /* --tg-theme-button-text-color: #0f172a; */
+        }
+
+        body {
+            font-family: "Segoe UI", Tahoma, sans-serif;
+            background-color: var(--tg-theme-bg-color, #0f172a); /* استفاده از متغیر یا مقدار پیش‌فرض */
+            color: var(--tg-theme-text-color, #e0f2fe);
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            /* جلوگیری از انتخاب متن ناخواسته */
+            user-select: none; 
+           -webkit-user-select: none;
+        }
+        
+        /* UI اصلی در ابتدا مخفی است */
+        h1, #toggle-layout-btn, #help-text, #visualization {
+            display: none;
+        }
+
+        h1 {
+            position: absolute;
+            top: 10px;
+            right: 15px; /* کمی فاصله بیشتر */
+            z-index: 10;
+            color: var(--tg-theme-link-color, #4fc3f7); /* رنگ لینک تم یا پیش‌فرض */
+            opacity: 0.8;
+            font-size: 1.4em; /* کمی کوچک‌تر برای موبایل */
+            text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        #visualization {
+            width: 100vw;
+            height: 100vh;
+            background-color: #1e293b;
+            background-image: radial-gradient(circle, #2a3a50 0%, #1e293b 70%);
+        }
+
+        #toggle-layout-btn {
+            position: absolute;
+            top: 15px; /* تنظیم موقعیت */
+            left: 15px;
+            z-index: 10;
+            background-color: var(--tg-theme-button-color, #4fc3f7); 
+            color: var(--tg-theme-button-text-color, #0f172a); 
+            border: none;
+            padding: 8px 12px; /* کمی کوچک‌تر */
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: "Segoe UI", Tahoma, sans-serif;
+            font-weight: bold;
+            transition: background-color 0.2s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        #toggle-layout-btn:hover {
+            filter: brightness(1.1); /* افکت هاور عمومی */
+        }
+
+        #help-text {
+            position: absolute;
+            bottom: 10px; /* کمی بالاتر */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            color: #fff;
+            background-color: rgba(30, 41, 59, 0.5); 
+            backdrop-filter: blur(5px);
+            padding: 5px 15px;
+            border-radius: 5px;
+            border: 1px solid rgba(227, 242, 253, 0.1);
+            font-size: 0.8em; /* کوچک‌تر */
+        }
+        
+        /* --- CSS پاپ‌آپ (Modal) --- */
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            z-index: 99;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.5); 
+        }
+        
+        /* استایل پایه مودال‌ها */
+        .glass-modal {
+             display: none;
+             position: fixed;
+             left: 50%;
+             top: 50%;
+             transform: translate(-50%, -50%);
+             width: 90%; 
+             max-width: 450px; 
+             background-color: rgba(179, 229, 252, 0.15); 
+             backdrop-filter: blur(15px); 
+             border: 1px solid rgba(227, 242, 253, 0.2); 
+             border-radius: 12px;
+             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+             box-sizing: border-box;
+        }
+
+        /* مودال اصلی (ویرایش گره) */
+        #custom-modal {
+             z-index: 100;
+             max-height: 85vh; 
+             display: flex; /* باید فلکس باشد تا overflow کار کند */
+             flex-direction: column;
+        }
+        
+        #modal-header {
+            padding: 15px 20px;
+            font-size: 1.2em;
+            font-weight: bold;
+            background-color: rgba(179, 229, 252, 0.1); 
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
+            color: var(--tg-theme-text-color, #e0f2fe);
+            border-bottom: 1px solid rgba(227, 242, 253, 0.1);
+            flex-shrink: 0; /* جلوگیری از کوچک شدن هدر */
+        }
+        
+        #modal-body {
+            padding: 20px;
+            overflow-y: auto; 
+            flex-grow: 1; /* بدنه بزرگ شود تا اسکرول بخورد */
+        }
+
+        #choice-buttons {
+            display: none; 
+            text-align: center;
+        }
+        #choice-buttons p {
+             color: #b3e5fc; 
+        }
+        /* دکمه‌های افزودن/ویرایش در مودال */
+         #choice-buttons button {
+            padding: 12px 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            border-radius: 8px; 
+            border: none;
+            font-family: "Segoe UI", Tahoma, sans-serif;
+            font-weight: bold;
+            width: 100%; 
+            box-sizing: border-box; 
+            margin: 10px 0;
+            transition: background-color 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        }
+        #choice-add-btn { background-color: var(--tg-theme-button-color, #4fc3f7); color: var(--tg-theme-button-text-color, #0f172a); } 
+        #choice-edit-btn { background-color: #b3e5fc; color: #0f172a; } 
+
+        #choice-add-btn:hover { filter: brightness(1.1); }
+        #choice-edit-btn:hover { filter: brightness(1.1); }
+
+        #node-form { display: none; }
+        #node-form .form-group { margin-bottom: 15px; }
+        #node-form label { display: block; margin-bottom: 5px; font-weight: bold; color: #b3e5fc; }
+        
+        #node-form input[type="text"],
+        #node-form input[type="date"],
+        #node-form textarea { 
+            width: 100%; 
+            box-sizing: border-box; 
+            padding: 10px; 
+            border-radius: 8px; 
+            border: 1px solid rgba(227, 242, 253, 0.2); 
+            background-color: rgba(15, 23, 42, 0.5); 
+            color: var(--tg-theme-text-color, #e0f2fe); 
+            font-family: "Segoe UI", Tahoma, sans-serif; 
+            font-size: 1em; 
+            transition: all 0.2s ease;
+        }
+        
+        #node-form ::placeholder {
+            color: #64748b; 
+            opacity: 0.8;
+        }
+
+        #node-form input[type="text"]:focus,
+        #node-form input[type="date"]:focus,
+        #node-form textarea:focus { 
+            border-color: var(--tg-theme-link-color, #4fc3f7); 
+            box-shadow: 0 0 0 2px rgba(79, 195, 247, 0.5);
+            outline: none;
+        }
+
+        #node-form textarea { resize: vertical; min-height: 60px; }
+        #node-form input[type="range"] { width: 100%; box-sizing: border-box; cursor: pointer;}
+        #node-form small { font-size: 0.8em; color: #94a3b8; margin-top: 5px; display: block; } 
+        #node-form input:disabled,
+        #node-form textarea:disabled { background-color: #1e293b; opacity: 0.5; cursor: not-allowed; }
+
+        #modal-footer {
+            padding: 15px 20px;
+            background-color: rgba(179, 229, 252, 0.1); 
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+            display: flex;
+            justify-content: center; /* مرکز چین کردن دکمه‌های اکشن */
+            flex-wrap: wrap; 
+            gap: 10px; 
+            border-top: 1px solid rgba(227, 242, 253, 0.1);
+             flex-shrink: 0; /* جلوگیری از کوچک شدن فوتر */
+        }
+        
+         /* تغییر ۲: حذف دکمه‌های ذخیره/بستن از HTML فوتر */
+         #modal-footer > div:last-child {
+              display: none; 
+         }
+        
+        /* نمایش دکمه‌های اکشن */
+        #action-buttons {
+             display: none; /* در حالت عادی مخفی */
+             /* flex-grow: 1;  نیازی نیست */
+             display: flex;
+             gap: 10px;
+             justify-content: center; /* مرکز چین کردن */
+             width: 100%; /* عرض کامل بگیرند */
+        }
+         #action-buttons button { 
+             margin-right: 0; 
+             padding: 10px 15px;
+             border: none;
+             border-radius: 5px;
+             cursor: pointer;
+             font-family: "Segoe UI", Tahoma, sans-serif;
+             font-weight: bold;
+             flex-grow: 1; /* دکمه‌ها فضا را تقسیم کنند */
+             transition: filter 0.2s ease;
+             box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+         }
+        
+        #happened-btn { background-color: #2dd4bf; color: #0f172a; } 
+        #not-happened-btn { background-color: #f43f5e; color: white; } 
+        #delete-btn { background-color: #e11d48; color: white; } 
+
+        #happened-btn:hover { filter: brightness(1.1); }
+        #not-happened-btn:hover { filter: brightness(1.1); }
+        #delete-btn:hover { filter: brightness(1.1); }
+
+        /* --- مودال خوش‌آمدگویی (انتخاب نقشه) --- */
+        #welcome-modal {
+            z-index: 101; 
+            padding: 20px;
+        }
+        #welcome-modal h2 {
+            margin-top: 0;
+            color: var(--tg-theme-text-color, #e0f2fe);
+            text-align: center;
+        }
+        
+        #welcome-new-map-name {
+            width: 100%; 
+            box-sizing: border-box; 
+            padding: 10px; 
+            border-radius: 8px; 
+            border: 1px solid rgba(227, 242, 253, 0.2); 
+            background-color: rgba(15, 23, 42, 0.5); 
+            color: var(--tg-theme-text-color, #e0f2fe); 
+            font-family: "Segoe UI", Tahoma, sans-serif; 
+            font-size: 1em; 
+            transition: all 0.2s ease;
+            margin-bottom: 15px; 
+        }
+         #welcome-new-map-name::placeholder {
+            color: #64748b; 
+            opacity: 0.8;
+        }
+         #welcome-new-map-name:focus {
+            border-color: var(--tg-theme-link-color, #4fc3f7); 
+            box-shadow: 0 0 0 2px rgba(79, 195, 247, 0.5);
+            outline: none;
+        }
+        
+        #welcome-load-section {
+            border-top: 1px solid rgba(227, 242, 253, 0.2);
+            padding-top: 15px;
+            margin-top: 15px;
+        }
+        #welcome-load-section label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #b3e5fc;
+        }
+        #welcome-map-selector {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(227, 242, 253, 0.2);
+            background-color: rgba(15, 23, 42, 0.5);
+            color: var(--tg-theme-text-color, #e0f2fe);
+            font-family: "Segoe UI", Tahoma, sans-serif;
+            font-size: 1em;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+        }
+         /* تغییر ۲: حذف دکمه‌های HTML از مودال خوش‌آمدگویی */
+        #welcome-create-btn, #welcome-load-btn {
+             display: none; 
+        }
+
+        /* --- حذف مودال اولین بازدید --- */
+
+        /* --- بهینه‌سازی‌های اختصاصی موبایل --- */
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.2em;
+                top: 15px;
+                right: 15px;
+            }
+            #toggle-layout-btn {
+                top: 15px;
+                left: 15px;
+                padding: 8px 12px;
+                font-size: 0.8em;
+            }
+            #help-text {
+                font-size: 0.8em;
+                bottom: 10px; /* تنظیم برای نمایش MainButton تلگرام */
+                width: 90%;
+                text-align: center;
+            }
+            #modal-body {
+                padding: 15px;
+            }
+            #modal-footer {
+                 padding: 10px 15px; /* کمی کمتر */
+            }
+             #action-buttons {
+                 gap: 8px;
+             }
+             #action-buttons button {
+                 padding: 8px 10px;
+                 font-size: 0.9em;
+             }
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>🧭 ناوبر آشوب</h1>
+    
+    <button id="toggle-layout-btn">تغییر به حالت ارگانیک</button>
+
+    <div id="help-text">
+        روی گره‌ها کلیک کنید...
+    </div>
+
+    <div id="visualization"></div>
+
+    <div id="modal-backdrop" class="modal-backdrop"></div>
+    <div id="custom-modal" class="glass-modal"> {/* افزودن کلاس پایه */}
+        <div id="modal-header">...</div>
+        <div id="modal-body">
+            
+            <div id="choice-buttons">
+                    <p>چه کاری می‌خواهید انجام دهید؟</p>
+                    <button id="choice-add-btn">➕ افزودن انشعاب جدید</button>
+                    <button id="choice-edit-btn">✏️ ویرایش / هرس / حذف</button>
+            </div>
+
+            <form id="node-form">
+                <div class="form-group">
+                    <label for="node-title">عنوان:</label>
+                    <input type="text" id="node-title" placeholder="مثال: موفقیت در پروژه X">
+                </div>
+                <div class="form-group">
+                    <label for="node-desc">توضیحات:</label>
+                    <textarea id="node-desc" placeholder="جزئیات بیشتر در مورد این احتمال..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="node-action">اقدام:</label>
+                    <textarea id="node-action" placeholder="اگر این اتفاق افتاد چه می‌کنید؟"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="node-probability">احتمال (0-10):</label>
+                    <input type="range" id="node-probability" min="0" max="10" value="5">
+                    <small>امتیاز بین 0 تا 10 بدهید.</small>
+                </div>
+                <div class="form-group">
+                    <label for="node-anxiety">اضطراب (0-100):</label>
+                    <input type="range" id="node-anxiety" min="0" max="100" value="50">
+                    <small>میزان نگرانی از وقوع (0 کم، 100 زیاد)</small> 
+                </div>
+                <div class="form-group">
+                    <label for="node-dueDate">تاریخ کلیدی:</label>
+                    <input type="date" id="node-dueDate" placeholder="تاریخی که نتیجه مشخص می‌شود (اختیاری)">
+                </div>
+            </form>
+
+        </div>
+        <div id="modal-footer">
+            <div id="action-buttons"><button id="happened-btn">✅</button><button id="not-happened-btn">❌</button><button id="delete-btn">🗑️</button></div>
+            </div>
+    </div>
+
+    <div id="welcome-modal-backdrop" class="modal-backdrop"></div>
+    <div id="welcome-modal" class="glass-modal"> {/* افزودن کلاس پایه */}
+        <h2>🧭 به ناوبر آشوب خوش آمدید</h2>
+        
+        <input type="text" id="welcome-new-map-name" placeholder="نام نقشه جدید...">
+        <div id="welcome-load-section">
+            <label for="welcome-map-selector">یک نقشه قبلی را انتخاب کنید:</label>
+            <select id="welcome-map-selector"></select>
+            </div>
+    </div>
+
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+
+    <script type="text/javascript">
+        
+        // --- مقداردهی اولیه تلگرام ---
+        const tg = window.Telegram.WebApp;
+        
+        // --- توابع کمکی ---
+        function getNodeSizeProps(probability) {
+            const prob = Math.max(parseFloat(probability) || 0, 0);
+            const size = 15 + prob; 
+            return {
+                size: size,
+                widthConstraint: size * 2,
+                heightConstraint: size * 2
+            };
+        }
+
+        // --- الف: تعریف دیتابیس‌ها ---
+        var nodes = new vis.DataSet();
+        var edges = new vis.DataSet();
+        var data = { nodes: nodes, edges: edges };
+        var nodeDataStore = {};
+
+        let allMapsData = {}; 
+        let currentMapId = null;
+        const defaultMapId = 'map_default';
+
+        const rootId = 1;
+        const rootData = { 
+            id: rootId, 
+            title: 'موضوع اصلی', 
+            description: 'روی من کلیک کنید...', 
+            actionPlan: '', 
+            probability: 10, 
+            cumulativeProbability: 10, 
+            anxiety: 0, 
+            dueDate: '', 
+            pruned: false, 
+        };
+        nodeDataStore[rootId] = rootData;
+        
+        nodes.add({ 
+            id: rootId, 
+            label: rootData.title, 
+            shape: 'circle', 
+            ...getNodeSizeProps(rootData.cumulativeProbability), 
+            color: { background: '#4fc3f7', border: '#81d4fa' }, 
+            font: { color: 'white', size: 14, multi: false } 
+        });
+        
+        const prunedColor = { background: '#1e293b', border: '#334155', highlight: { background: '#1e293b', border: '#334155' } };
+        const prunedFont = { color: '#475569' };
+
+        // --- ب، ج، د: تنظیمات و ایجاد گراف ---
+        const baseOptions = { 
+            nodes: { 
+                shape: 'circle', 
+                ...getNodeSizeProps(5), 
+                scaling: { label: { enabled: false } }, 
+                color: { 
+                    background: '#334155', 
+                    border: '#475569', 
+                    highlight: { background: '#475569', border: '#4fc3f7' } 
+                }, 
+                font: { color: '#e0f2fe', size: 14, multi: false }, 
+            }, 
+            interaction: { dragNodes: true, dragView: true, zoomView: true } 
+        };
+        const hierarchicalOptions = { /* ... */ }; // (کد قبلی بدون تغییر)
+        const physicsOptions = { /* ... */ }; // (کد قبلی بدون تغییر)
+        
+        var container = document.getElementById('visualization');
+        let isHierarchical = true;
+        var network = new vis.Network(container, data, hierarchicalOptions);
+        const toggleBtn = document.getElementById('toggle-layout-btn');
+        toggleBtn.addEventListener('click', function() { /* ... */ }); // (کد قبلی بدون تغییر)
+
+        // --- هـ: منطق پاپ‌آپ (Modal) ---
+        
+        const modal = document.getElementById('custom-modal');
+        const backdrop = document.getElementById('modal-backdrop');
+        const modalHeader = document.getElementById('modal-header');
+        const nodeForm = document.getElementById('node-form');
+        const titleInput = document.getElementById('node-title');
+        const descInput = document.getElementById('node-desc');
+        const actionInput = document.getElementById('node-action');
+        const probabilityInput = document.getElementById('node-probability');
+        const anxietyInput = document.getElementById('node-anxiety');
+        const dueDateInput = document.getElementById('node-dueDate');
+        // const saveBtn = document.getElementById('modal-save-btn'); // حذف شد
+        // const closeBtn = document.getElementById('modal-close-btn'); // حذف شد
+        const actionButtons = document.getElementById('action-buttons'); 
+        const happenedBtn = document.getElementById('happened-btn');
+        const notHappenedBtn = document.getElementById('not-happened-btn');
+        const deleteBtn = document.getElementById('delete-btn');
+        const choiceButtonsDiv = document.getElementById('choice-buttons');
+        const choiceAddBtn = document.getElementById('choice-add-btn');
+        const choiceEditBtn = document.getElementById('choice-edit-btn');
+        
+        let currentMode = 'choice'; // "choice", "add", "edit"
+        let selectedNodeId = null; 
+        let currentModal = null; // "welcome" or "custom" or null
+
+        // --- توابع مربوط به مودال ویرایش/افزودن ---
+        
+        // تغییر ۳: تابع جدید برای هندل کردن کلیک MainButton
+        function handleCustomModalSave() {
+             tg.MainButton.showProgress(); // نمایش لودینگ
+             
+             const localProb = parseFloat(probabilityInput.value) || 0;
+            
+            let parentNodeData = null;
+            if (currentMode === 'add') {
+                 parentNodeData = nodeDataStore[selectedNodeId];
+            } else if (currentMode === 'edit' && selectedNodeId !== rootId) {
+                const parentEdge = edges.get({ filter: e => e.to === selectedNodeId });
+                if (parentEdge.length > 0) {
+                    parentNodeData = nodeDataStore[parentEdge[0].from];
+                }
+            }
+            const parentCumProb = parentNodeData ? parentNodeData.cumulativeProbability : 10;
+            
+            const newCumulativeProb = (selectedNodeId === rootId && currentMode === 'edit') 
+                ? localProb 
+                : parentCumProb * (localProb / 10.0);
+
+            const nodeData = {
+                title: titleInput.value.trim() || 'بدون عنوان',
+                description: descInput.value.trim(),
+                actionPlan: actionInput.value.trim(),
+                probability: localProb, 
+                cumulativeProbability: newCumulativeProb, 
+                anxiety: anxietyInput.value,
+                dueDate: dueDateInput.value,
+                pruned: false,
+            };
+            
+            const displayData = { 
+                label: nodeData.title,
+                ...getNodeSizeProps(nodeData.cumulativeProbability)
+            }; 
+
+            try {
+                if (currentMode === 'add') {
+                    const newNodeId = Date.now();
+                    nodeDataStore[newNodeId] = { id: newNodeId, ...nodeData };
+                    nodes.add({ id: newNodeId, ...displayData });
+                    edges.add({ from: selectedNodeId, to: newNodeId });
+                } else if (currentMode === 'edit') {
+                    nodeDataStore[selectedNodeId] = { ...nodeDataStore[selectedNodeId], ...nodeData, id: selectedNodeId };
+                    nodes.update({ id: selectedNodeId, ...displayData });
+                    updateChildrenCumulativeProb(selectedNodeId);
+                }
+                saveCurrentMapData(); 
+                tg.HapticFeedback.notificationOccurred('success'); // بازخورد موفقیت
+                closeModal(); // بستن مودال پس از موفقیت
+            } catch (err) { 
+                console.error("Save error:", err);
+                tg.showAlert('خطا در ذخیره سازی گره: ' + err.message); 
+                tg.HapticFeedback.notificationOccurred('error'); // بازخورد خطا
+            } finally {
+                 tg.MainButton.hideProgress(); // پنهان کردن لودینگ
+            }
+        }
+
+        function openModal(mode, nodeId) {
+            currentModal = "custom"; // مشخص کردن مودال فعال
+            currentMode = mode;
+            selectedNodeId = nodeId;
+            
+            choiceButtonsDiv.style.display = 'none';
+            nodeForm.style.display = 'none';
+            actionButtons.style.display = 'none';
+            // MainButton جایگزین saveBtn می‌شود
+            tg.MainButton.hide(); 
+            // نمایش BackButton برای بستن
+            tg.BackButton.show();
+            tg.onEvent('backButtonClicked', closeModal);
+
+            if (mode === 'choice') {
+                modalHeader.innerText = `گره: ${nodeDataStore[nodeId]?.title || 'ناشناخته'}`;
+                choiceButtonsDiv.style.display = 'block';
+                 // در حالت انتخاب دکمه اصلی و بک نداریم
+                 tg.BackButton.hide();
+            } else if (mode === 'add') {
+                modalHeader.innerText = 'افزودن انشعاب جدید';
+                nodeForm.reset();
+                Array.from(nodeForm.elements).forEach(el => el.disabled = false);
+                probabilityInput.value = 5; 
+                anxietyInput.value = 50;
+                nodeForm.style.display = 'block';
+                // تنظیم دکمه اصلی تلگرام برای افزودن
+                tg.MainButton.setText('افزودن گره');
+                tg.MainButton.onClick(handleCustomModalSave);
+                tg.MainButton.show();
+                
+            } else if (mode === 'edit') {
+                modalHeader.innerText = 'ویرایش / هرس / حذف';
+                nodeForm.style.display = 'block';
+                
+                const nodeData = nodeDataStore[nodeId];
+                if (!nodeData) return closeModal();
+
+                titleInput.value = nodeData.title;
+                descInput.value = nodeData.description || '';
+                actionInput.value = nodeData.actionPlan || '';
+                probabilityInput.value = nodeData.probability || 5; 
+                anxietyInput.value = nodeData.anxiety || 50;
+                dueDateInput.value = nodeData.dueDate || '';
+
+                // نمایش/عدم نمایش دکمه‌های اکشن (✅ ❌ 🗑️)
+                if (nodeId !== rootId && !nodeData.pruned) { 
+                    actionButtons.style.display = 'flex';
+                }
+                
+                // اگر هرس شده، فرم قفل و دکمه ذخیره تلگرام غیرفعال
+                if (nodeData.pruned) {
+                    Array.from(nodeForm.elements).forEach(el => el.disabled = true);
+                     tg.BackButton.show(); // فقط دکمه برگشت
+                } else {
+                    // تنظیم دکمه اصلی تلگرام برای ذخیره تغییرات
+                    tg.MainButton.setText('ذخیره تغییرات');
+                    tg.MainButton.onClick(handleCustomModalSave);
+                    tg.MainButton.show();
+                }
+            }
+            
+            modal.style.display = 'flex'; 
+            backdrop.style.display = 'block';
+        }
+
+        function closeModal() {
+             if (currentModal === "custom") {
+                 modal.style.display = 'none';
+                 backdrop.style.display = 'none';
+                 selectedNodeId = null;
+                 // پنهان کردن دکمه‌های تلگرام و حذف رویدادها
+                 tg.MainButton.offClick(handleCustomModalSave); // حذف هندلر قبلی
+                 tg.MainButton.hide();
+                 tg.BackButton.offClick(closeModal);
+                 tg.BackButton.hide();
+                 currentModal = null;
+             } else if (currentModal === "welcome") {
+                 // منطق بستن مودال خوش‌آمدگویی (اگر لازم باشد دکمه بستن اضافه شود)
+                 // فعلا فقط با انتخاب یا ایجاد بسته می‌شود
+             }
+        }
+        
+        // رویداد دکمه‌های داخلی مودال ویرایش/افزودن
+        choiceAddBtn.onclick = function() {
+            openModal('add', selectedNodeId); 
+        };
+        choiceEditBtn.onclick = function() {
+            openModal('edit', selectedNodeId);
+        };
+        
+        // --- و: منطق کلیک روی گره ---
+        network.on('click', function(params) {
+             // جلوگیری از باز شدن مودال هنگام درگ کردن
+             network.on("dragStart", () => { network.off('click'); });
+             network.on("dragEnd", () => { 
+                 // کمی تاخیر برای جلوگیری از کلیک ناخواسته پس از درگ
+                 setTimeout(() => network.on('click', nodeClickHandler), 100); 
+             });
+
+             // هندلر اصلی کلیک
+             const nodeClickHandler = (clickParams) => {
+                 if (clickParams.nodes.length > 0) {
+                     const nodeId = clickParams.nodes[0];
+                     openModal('choice', nodeId); 
+                     tg.HapticFeedback.impactOccurred('light'); // بازخورد لمسی
+                 }
+             };
+             // اتصال اولیه هندلر
+             network.off('click', nodeClickHandler); // حذف قبلی (اگر بود)
+             network.on('click', nodeClickHandler);
+             // اجرای هندلر برای کلیک فعلی
+             nodeClickHandler(params); 
+         });
+         
+        // --- تابع آپدیت بازگشتی فرزندان ---
+        function updateChildrenCumulativeProb(parentNodeId) { /* ... */ } // (کد قبلی بدون تغییر)
+
+        
+        // --- ز: منطق هرس کردن و ارتقاء ---
+        
+        // استفاده از showConfirm تلگرام
+        happenedBtn.onclick = function() { 
+             tg.showConfirm("آیا مطمئن هستید؟ این گره به ریشه جدید تبدیل شده و بقیه انشعابات حذف می‌شوند.", (ok) => {
+                 if (ok) {
+                    promoteNodeToRoot(selectedNodeId); 
+                    saveCurrentMapData(); 
+                    tg.HapticFeedback.notificationOccurred('success');
+                    closeModal(); 
+                 }
+             });
+        };
+        
+        notHappenedBtn.onclick = function() { 
+            // برای هرس نیازی به تایید نیست چون قابل بازگشت نیست (فعلا)
+            pruneSiblings(selectedNodeId, false); 
+            saveCurrentMapData(); 
+            tg.HapticFeedback.notificationOccurred('warning'); // یا success
+            closeModal(); 
+        };
+
+        deleteBtn.onclick = function() { 
+             tg.showConfirm("آیا از حذف این گره و تمام زیرشاخه‌هایش مطمئن هستید؟ (غیرقابل بازگشت)", (ok) => {
+                 if (ok) {
+                     deleteNodeAndChildren(selectedNodeId); 
+                     saveCurrentMapData(); 
+                     tg.HapticFeedback.notificationOccurred('success');
+                     closeModal(); 
+                 }
+             });
+        };
+
+        // توابع pruneSiblings, pruneNodeAndChildren, getDescendants, promoteNodeToRoot بدون تغییر
+
+        // --- ح: منطق حذف ---
+        function deleteNodeAndChildren(startNodeId) { /* ... */ } // (کد قبلی بدون تغییر)
+
+        // --- ط: منطق ذخیره سازی و بارگذاری ---
+        const localStorageKey = 'chaosMapMultiData_v2_tg'; // کلید متفاوت برای مینی اپ
+        const lastActiveMapKey = 'chaosMapLastActive_v2_tg';
+        // const visitedKey = 'chaosNavigatorVisited_v1_tg'; // دیگر لازم نیست
+
+        function saveAllData() { /* ... */ } // (کد قبلی بدون تغییر)
+        function saveCurrentMapData() { /* ... */ } // (کد قبلی بدون تغییر)
+        
+        function showMainUI() {
+            document.getElementById('visualization').style.display = 'block';
+            document.querySelector('h1').style.display = 'block';
+            document.getElementById('toggle-layout-btn').style.display = 'block';
+            document.getElementById('help-text').style.display = 'block';
+            // اطمینان از بسته بودن مودال خوش‌آمدگویی
+            closeWelcomeModal(); 
+             // فعال کردن بستن با سوایپ (اگر لازم باشد)
+             tg.enableClosingConfirmation(); 
+        }
+        
+        function loadMap(mapId) { 
+             // ... (منطق بارگذاری نقشه مثل قبل) ...
+             
+            showMainUI();
+
+            setTimeout(() => {
+                if (!isHierarchical) {
+                    nodes.update({ id: rootId, fixed: true, x: 0, y: 0 }); 
+                }
+                try { // فوکوس ممکن است قبل از رندر کامل خطا دهد
+                     network.focus(rootId, {
+                        scale: 1.0, 
+                        animation: { duration: 800, easingFunction: 'easeInOutQuad' }
+                     });
+                } catch (e) { console.warn("Focus error ignored:", e); }
+            }, 50); // کمی تاخیر بیشتر برای اطمینان
+        }
+        
+        // تغییر ۴: createNewMap نام را به عنوان آرگومان می‌گیرد
+        function createNewMap(isDefault = false, mapNameFromInput = null) { 
+            let mapName = mapNameFromInput; 
+            if (isDefault) {
+                mapName = "نقشه پیش‌فرض";
+            } else if (!mapName) { 
+                 // اگر نام از ورودی نیامده، یک نام پیش‌فرض بده
+                 mapName = `نقشه ${Object.keys(allMapsData).length + 1}`;
+            }
+            
+            const newMapId = isDefault ? defaultMapId : `map_${Date.now()}`; 
+            const defaultNodeData = { ...rootData }; 
+            allMapsData[newMapId] = { id: newMapId, name: mapName, nodes: [{ id: rootId, label: defaultNodeData.title }], edges: [], nodeStore: { [rootId]: defaultNodeData } }; 
+            loadMap(newMapId); 
+            saveAllData(); 
+            return newMapId; // آیدی نقشه جدید را برگردان
+        }
+        function deleteCurrentMap() { /* ... */ } // (کد قبلی بدون تغییر)
+        function updateMapSelector() { /* ... */ } // (کد قبلی بدون تغییر)
+        
+        // --- ی: بارگذاری اولیه ---
+        
+        const welcomeModal = document.getElementById('welcome-modal');
+        const welcomeBackdrop = document.getElementById('welcome-modal-backdrop');
+        const welcomeMapSelector = document.getElementById('welcome-map-selector');
+        const welcomeLoadSection = document.getElementById('welcome-load-section');
+        const welcomeNewMapNameInput = document.getElementById('welcome-new-map-name'); 
+
+        // حذف ارجاع به مودال اولین بازدید
+        
+        function populateWelcomeSelector() { /* ... */ } // (کد قبلی بدون تغییر)
+
+        function closeWelcomeModal() {
+            welcomeModal.style.display = 'none';
+            welcomeBackdrop.style.display = 'none';
+            // غیرفعال کردن دکمه اصلی تلگرام
+            tg.MainButton.offClick(handleWelcomeCreate);
+            tg.MainButton.offClick(handleWelcomeLoad);
+            tg.MainButton.hide();
+            currentModal = null;
+        }
+
+         // تغییر ۵: هندلرهای دکمه اصلی برای مودال خوش‌آمدگویی
+         function handleWelcomeCreate() {
+             const newName = welcomeNewMapNameInput.value.trim();
+             if (!newName) {
+                 tg.showAlert("لطفا یک نام برای نقشه جدید وارد کنید.");
+                 welcomeNewMapNameInput.focus();
+                 return;
+             }
+             tg.MainButton.showProgress();
+             // کمی تاخیر تا کاربر لودینگ را ببیند
+             setTimeout(() => {
+                 const newMapId = createNewMap(false, newName); 
+                 if (newMapId) { 
+                     closeWelcomeModal(); // loadMap در انتها UI را نشان می‌دهد
+                 } else {
+                     tg.showAlert("خطا در ایجاد نقشه جدید.");
+                 }
+                  tg.MainButton.hideProgress();
+             }, 100);
+         }
+
+         function handleWelcomeLoad() {
+             const selectedMapId = welcomeMapSelector.value;
+             if (selectedMapId) {
+                 tg.MainButton.showProgress();
+                 setTimeout(() => {
+                    loadMap(selectedMapId);
+                    closeWelcomeModal();
+                    tg.MainButton.hideProgress();
+                 }, 100);
+             } else {
+                 tg.showAlert("نقشه‌ای برای بارگذاری انتخاب نشده است."); 
+             }
+         }
+
+
+        function initialLoad() { 
+            currentModal = "welcome"; // مشخص کردن مودال فعال
+            
+            const savedDataString = localStorage.getItem(localStorageKey); 
+            if (savedDataString) { 
+                try { allMapsData = JSON.parse(savedDataString); } catch (error) { allMapsData = {}; } 
+            } else { 
+                allMapsData = {}; 
+            } 
+            
+            populateWelcomeSelector();
+            
+            // تنظیم دکمه اصلی بر اساس وجود نقشه‌ها
+             if (Object.keys(allMapsData).length > 0) {
+                 // اگر نقشه هست، اولویت با بارگذاری است
+                 welcomeMapSelector.focus(); // فوکوس روی انتخاب نقشه
+                 tg.MainButton.setText("بارگذاری نقشه انتخاب شده");
+                 tg.MainButton.onClick(handleWelcomeLoad);
+             } else {
+                 // اگر نقشه‌ای نیست، فقط گزینه ایجاد وجود دارد
+                 welcomeNewMapNameInput.focus(); // فوکوس روی نام جدید
+                 tg.MainButton.setText("ایجاد نقشه جدید");
+                 tg.MainButton.onClick(handleWelcomeCreate);
+             }
+             tg.MainButton.show();
+
+
+            welcomeModal.style.display = 'block';
+            welcomeBackdrop.style.display = 'block';
+
+             // غیرفعال کردن بستن با سوایپ در صفحه اول
+             tg.disableClosingConfirmation(); 
+        }
+        
+        // --- ک: اتصال رویدادهای سایدبار ---
+        // (این بخش در مینی اپ کاربردی ندارد مگر اینکه دکمه‌های مشابهی اضافه کنید)
+
+        // --- اجرای برنامه ---
+        tg.ready(() => {
+             // tg.expand(); // باز کردن تمام صفحه (اختیاری)
+             
+            // اعمال تم تلگرام (اختیاری)
+            // document.body.style.backgroundColor = tg.themeParams.bg_color || '#0f172a';
+            // document.body.style.color = tg.themeParams.text_color || '#e0f2fe';
+            
+            initialLoad();
+        });
+
+    </script>
+
+</body>
+</html>
